@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>บันทึกการใช้น้ำ (รายวัน) – อช.น้ำตกหงาว v2</title>
+  <style>
+    :root { --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#475569; --line:#e2e8f0; --accent:#0ea5e9; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans Thai', 'Noto Sans', sans-serif; background:var(--bg); color:var(--text); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin-bottom: 10px; }
+    .card { background: var(--card); border:1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04); padding:12px; }
+    .grid { display: grid; gap: 10px; }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    @media (max-width: 900px){ .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 560px){ .grid-4 { grid-template-columns: 1fr; } }
+    label { font-size: 12px; color: var(--muted); display:block; }
+    input, select, textarea { width: 100%; margin-top: 6px; padding: 10px 12px; border:1px solid var(--line); border-radius:10px; background:white; }
+    textarea { min-height: 72px; resize: vertical; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+    .right { margin-left:auto; }
+    .btn { padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:white; cursor:pointer; }
+    .btn.primary { background: var(--accent); color:white; border-color: var(--accent); }
+    .btn.danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+    .btn.small { padding:6px 10px; font-size: 13px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 10px 12px; border-bottom:1px solid var(--line); text-align:left; }
+    th { background:#f1f5f9; font-weight:600; font-size: 13px; color:#0f172a; position: sticky; top: 0; }
+    td.num { text-align:right; }
+    .muted { color: var(--muted); font-size:12px; }
+    .badge { background:#e2e8f0; padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#334155; }
+    .section { margin-top: 10px; }
+    .kpi { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+    .tile { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; }
+    .title { font-size:12px; color:var(--muted); }
+    .value { font-weight:700; font-size:20px; margin-top:4px; }
+    .chart-wrap { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px; overflow:auto; }
+    svg { width: 100%; height: 300px; }
+    .csv-fallback { display:none; margin-top:10px; }
+    .csv-fallback.show { display:block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>บันทึกการใช้น้ำ (รายวัน) – อุทยานแห่งชาติน้ำตกหงาว v2</h1>
+    <div class="sub">เวอร์ชันเข้ากันได้สูง (ไฟล์เดียว) – ปุ่มต้องกดได้ ถ้าไม่ได้มีปุ่ม “ทดสอบระบบ” ให้ลองกด</div>
+
+    <div class="row section">
+      <button class="btn" type="button" id="testBtn">🔧 ทดสอบระบบ</button>
+      <span class="badge" id="status">พร้อมใช้งาน</span>
+      <span class="right row">
+        <button class="btn" type="button" id="exportBtn">ส่งออก CSV</button>
+        <button class="btn" type="button" id="clearBtn" title="ล้างข้อมูลทั้งหมด">ล้างข้อมูลทั้งหมด</button>
+      </span>
+    </div>
+
+    <!-- INPUT -->
+    <div class="card section">
+      <div class="grid grid-4">
+        <div>
+          <label>บ้าน/หลังที่</label>
+          <input id="house" placeholder="เช่น บ้าน 3">
+        </div>
+        <div>
+          <label>ผู้พัก (ถ้ามี)</label>
+          <input id="occupant">
+        </div>
+        <div>
+          <label>วันที่</label>
+          <input type="date" id="date">
+        </div>
+        <div>
+          <label>เลขมิเตอร์รวม ณ สิ้นวัน</label>
+          <input type="number" id="reading" min="0" step="1" value="0">
+        </div>
+        <div>
+          <label>หน่วยที่ใช้วันนี้ (คำนวณอัตโนมัติ)</label>
+          <input id="usage" readonly>
+        </div>
+        <div style="grid-column: span 3;">
+          <label>หมายเหตุ</label>
+          <textarea id="note" placeholder="เช่น ซ่อมท่อ/รั่ว/ไม่อยู่บ้าน"></textarea>
+        </div>
+      </div>
+      <div class="row section">
+        <span class="right row">
+          <button class="btn" type="button" id="resetBtn">ล้างแบบฟอร์ม</button>
+          <button class="btn primary" type="button" id="saveBtn">บันทึก</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="row section">
+      <div class="row" style="gap:12px">
+        <div>
+          <label>บ้านพัก</label>
+          <select id="filterHouse"></select>
+        </div>
+        <div>
+          <label>เดือน</label>
+          <select id="filterMonth"></select>
+        </div>
+        <div>
+          <label>ปี</label>
+          <select id="filterYear"></select>
+        </div>
+      </div>
+      <span class="right muted">บันทึกทั้งหมด: <span id="count">0</span> รายการ</span>
+    </div>
+    <div class="card" style="overflow:auto; max-height: 50vh;">
+      <table id="table">
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th>บ้าน</th>
+            <th>ผู้พัก</th>
+            <th class="num">เลขมิเตอร์รวม</th>
+            <th class="num">หน่วยใช้</th>
+            <th>หมายเหตุ</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="7" class="muted" style="text-align:center">ยังไม่มีข้อมูล</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SUMMARY + CHART -->
+    <div class="row section">
+      <div class="row" style="gap:12px">
+        <div>
+          <label>บ้านพัก</label>
+          <select id="sumHouse"></select>
+        </div>
+        <div>
+          <label>เดือน</label>
+          <select id="sumMonth"></select>
+        </div>
+        <div>
+          <label>ปี</label>
+          <select id="sumYear"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi section">
+      <div class="tile">
+        <div class="title">รวมหน่วยใช้ (เดือนนี้)</div>
+        <div class="value" id="kpiTotal">0</div>
+      </div>
+      <div class="tile">
+        <div class="title">ค่าเฉลี่ยต่อวัน</div>
+        <div class="value" id="kpiAvg">0</div>
+      </div>
+      <div class="tile">
+        <div class="title">ค่าสูงสุด/วัน</div>
+        <div class="value" id="kpiMax">0</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap section">
+      <div class="muted">กราฟหน่วยใช้น้ำรายวัน</div>
+      <div id="chartArea"></div>
+    </div>
+
+    <!-- CSV FALLBACK -->
+    <div class="card csv-fallback" id="csvFallback">
+      <div class="row"><strong>ดาวน์โหลดมีปัญหา?</strong> คัดลอกข้อความ CSV ด้านล่างไปวางใน Excel/Sheets ได้เลย</div>
+      <textarea id="csvText"></textarea>
+    </div>
+
+    <p class="muted section">ข้อมูลเก็บในเครื่อง (localStorage) – หากเปลี่ยนเครื่อง/เบราว์เซอร์ ข้อมูลจะไม่ตามไป</p>
+  </div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'ngaow-water-daily-v2';
+  const monthsTH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+
+  const el = (id)=> document.getElementById(id);
+  const fmtDate = (d)=> new Date(d).toLocaleDateString('th-TH', {year:'numeric', month:'2-digit', day:'2-digit'});
+  const toYMD = (date)=> {
+    const t = new Date(date); const y=t.getFullYear(), m=String(t.getMonth()+1).padStart(2,'0'), d=String(t.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // Elements
+  const status = el('status');
+  const testBtn = el('testBtn');
+  const house = el('house'), occupant = el('occupant'), dateEl = el('date'), reading = el('reading'), usage = el('usage'), note = el('note');
+  const saveBtn = el('saveBtn'), resetBtn = el('resetBtn'), exportBtn = el('exportBtn'), clearBtn = el('clearBtn');
+  const filterHouse = el('filterHouse'), filterMonth = el('filterMonth'), filterYear = el('filterYear');
+  const sumHouse = el('sumHouse'), sumMonth = el('sumMonth'), sumYear = el('sumYear');
+  const tableBody = document.querySelector('#table tbody'), count = el('count');
+  const chartArea = el('chartArea');
+  const csvFallback = el('csvFallback'), csvText = el('csvText');
+
+  // Default date
+  dateEl.value = toYMD(new Date());
+
+  // Test button (to confirm clicks work)
+  testBtn.addEventListener('click', ()=> {
+    alert('ปุ่มทำงานปกติ ✅');
+  }, false);
+
+  function setStatus(text, ok=true){
+    status.textContent = text;
+    status.style.background = ok ? '#dcfce7' : '#fee2e2';
+    status.style.color = ok ? '#065f46' : '#991b1b';
+  }
+
+  // Storage
+  function readStore(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]; } catch { return []; } }
+  function writeStore(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); refreshAll(); }
+
+  function uid(){ return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  // Live preview usage
+  function calcUsagePreview(){
+    const list = readStore().filter(x=> x.house.trim() === (house.value||'').trim()).sort((a,b)=> a.date.localeCompare(b.date));
+    const today = dateEl.value;
+    const prev = [...list].filter(x=> x.date < today).pop();
+    const e = Number(reading.value||0);
+    const s = prev ? Number(prev.reading||0) : e; // first entry -> 0 usage
+    usage.value = Math.max(0, e - s);
+  }
+  reading.addEventListener('input', calcUsagePreview, false);
+  dateEl.addEventListener('change', calcUsagePreview, false);
+  house.addEventListener('input', calcUsagePreview, false);
+
+  // Reset
+  resetBtn.addEventListener('click', ()=>{
+    occupant.value=''; note.value=''; reading.value='0'; usage.value='0'; dateEl.value = toYMD(new Date());
+    setStatus('พร้อมใช้งาน', true);
+  }, false);
+
+  // Save
+  saveBtn.addEventListener('click', ()=>{
+    if (!house.value.trim()){ setStatus("กรุณากรอก 'บ้าน/หลังที่'", false); return; }
+    if (!dateEl.value){ setStatus('กรุณาเลือกวันที่', false); return; }
+    const list = readStore();
+    const byHouse = list.filter(x=> x.house.trim() === house.value.trim()).sort((a,b)=> a.date.localeCompare(b.date));
+    const prev = byHouse.filter(x=> x.date < dateEl.value).pop();
+    const e = Number(reading.value||0);
+    const s = prev ? Number(prev.reading||0) : e;
+    const u = Math.max(0, e - s);
+    const rec = { id: uid(), house: house.value.trim(), occupant: occupant.value.trim(), date: dateEl.value, reading:e, usage:u, note: note.value.trim(), createdAt: new Date().toISOString() };
+
+    // Replace if same date+house
+    const idx = list.findIndex(x=> x.house===rec.house && x.date===rec.date);
+    if (idx >= 0) list[idx] = { ...list[idx], ...rec, id: list[idx].id };
+    else list.push(rec);
+
+    // Recompute continuity for this house
+    const sorted = list.filter(x=> x.house===rec.house).sort((a,b)=> a.date.localeCompare(b.date));
+    let prevRead = null;
+    for (const r of sorted){
+      if (prevRead == null){ r.usage = 0; prevRead = r.reading; }
+      else { r.usage = Math.max(0, r.reading - prevRead); prevRead = r.reading; }
+      const j = list.findIndex(x=> x.id===r.id);
+      if (j >= 0) list[j] = r;
+    }
+
+    writeStore(list);
+    setStatus('บันทึกแล้ว ✅', true);
+    calcUsagePreview();
+  }, false);
+
+  // Filters
+  function unique(arr){ return [...new Set(arr)]; }
+  function refreshFilters(){
+    const list = readStore();
+    const houses = unique(list.map(x=> x.house)).sort();
+    const years = unique(list.map(x=> Number(x.date.slice(0,4)))).sort((a,b)=> a-b);
+    const months = [...Array(12)].map((_,i)=> i+1);
+
+    function setOptions(select, values, labels, allOption=true){
+      const keep = select.value;
+      select.innerHTML = '';
+      if (allOption){
+        const optAll = document.createElement('option'); optAll.value = ''; optAll.textContent = 'ทั้งหมด';
+        select.appendChild(optAll);
+      }
+      values.forEach((v,i)=> {
+        const o = document.createElement('option'); o.value = String(v); o.textContent = (labels?labels[i]:v);
+        select.appendChild(o);
+      });
+      select.value = keep || (allOption ? '' : (values[0]||''));
+    }
+
+    setOptions(filterHouse, houses, null, true);
+    setOptions(filterYear, years, null, true);
+    setOptions(filterMonth, months, months.map(i=> (i<10?'0':'')+i + ' - ' + monthsTH[i-1]), true);
+
+    // summary (no 'ทั้งหมด')
+    function setExact(select, values, labels){
+      const keep = select.value;
+      select.innerHTML = '';
+      values.forEach((v,i)=> {
+        const o = document.createElement('option'); o.value = String(v); o.textContent = (labels?labels[i]:v);
+        select.appendChild(o);
+      });
+      if (!values.length) select.value = ''; else select.value = keep && values.includes(keep) ? keep : String(values[0]);
+    }
+    setExact(sumHouse, houses);
+    setExact(sumYear, years.length? years : [new Date().getFullYear()]);
+    setExact(sumMonth, months, months.map(i=> (i<10?'0':'')+i + ' - ' + monthsTH[i-1]));
+  }
+
+  // Table
+  function renderTable(){
+    const list = readStore().sort((a,b)=> a.date.localeCompare(b.date));
+    count.textContent = list.length;
+    tableBody.innerHTML = '';
+    const fh = filterHouse.value, fm = filterMonth.value, fy = filterYear.value;
+    const filtered = list.filter(x=> (!fh || x.house===fh) && (!fm || Number(x.date.slice(5,7))===Number(fm)) && (!fy || Number(x.date.slice(0,4))===Number(fy)) );
+    if (!filtered.length){
+      const tr = document.createElement('tr'); const td = document.createElement('td');
+      td.colSpan=7; td.className='muted'; td.style.textAlign='center'; td.textContent='ยังไม่มีข้อมูล';
+      tr.appendChild(td); tableBody.appendChild(tr); return;
+    }
+    for (const b of filtered){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fmtDate(b.date)}</td>
+        <td>${b.house}</td>
+        <td>${b.occupant||''}</td>
+        <td class=\"num\">${b.reading}</td>
+        <td class=\"num\">${b.usage}</td>
+        <td>${b.note||''}</td>
+        <td><button class=\"btn small danger\" type=\"button\" data-del=\"${b.id}\">ลบ</button></td>
+      `;
+      tableBody.appendChild(tr);
+    }
+  }
+  tableBody.addEventListener('click', (e)=>{
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (t.dataset.del){
+      if (!confirm('ลบรายการนี้หรือไม่?')) return;
+      const list = readStore().filter(x=> x.id !== t.dataset.del);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      refreshAll();
+    }
+  }, false);
+
+  // Chart
+  function drawChart(){
+    const list = readStore();
+    chartArea.innerHTML = '';
+    if (!sumHouse.value || !sumYear.value || !sumMonth.value){ chartArea.innerHTML='<div class="muted">ยังไม่มีข้อมูลพอให้วาดกราฟ</div>'; return; }
+    const y = Number(sumYear.value), m = Number(sumMonth.value);
+    const filtered = list.filter(x=> x.house===sumHouse.value && Number(x.date.slice(0,4))===y && Number(x.date.slice(5,7))===m)
+                         .sort((a,b)=> a.date.localeCompare(b.date));
+    const total = filtered.reduce((s,x)=> s + Number(x.usage||0), 0);
+    const avg = filtered.length ? (total/filtered.length) : 0;
+    const max = filtered.reduce((mx,x)=> Math.max(mx, Number(x.usage||0)), 0);
+    el('kpiTotal').textContent = String(total);
+    el('kpiAvg').textContent = filtered.length ? avg.toFixed(2) : '0';
+    el('kpiMax').textContent = String(max);
+
+    if (filtered.length === 0){ chartArea.innerHTML='<div class="muted">ไม่มีข้อมูลในเดือนที่เลือก</div>'; return; }
+
+    const W = 980, H = 300, P = {l:48, r:12, t:10, b:24};
+    const xs = filtered.map(r=> Number(r.date.slice(8,10)));
+    const ys = filtered.map(r=> Number(r.usage));
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = 0, maxY = Math.max(1, Math.max(...ys));
+    const xscale = d => P.l + ( (d - minX)/(maxX - minX || 1) ) * (W - P.l - P.r);
+    const yscale = v => H - P.b - ( (v - minY)/(maxY - minY || 1) ) * (H - P.t - P.b);
+    const points = xs.map((d,i)=> [xscale(d), yscale(ys[i])]);
+    const path = points.map((p,i)=> (i?'L':'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+
+    const ticksY = 5;
+    const yTicks = [...Array(ticksY+1)].map((_,i)=> minY + i*(maxY-minY)/ticksY);
+
+    const svg = [`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟหน่วยใช้น้ำรายวัน">`,
+      `<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff" stroke="#e2e8f0"/>`,
+      ...yTicks.map(v=> `<line x1="${P.l}" y1="${yscale(v)}" x2="${W-P.r}" y2="${yscale(v)}" stroke="#e2e8f0"/>`),
+      `<line x1="${P.l}" y1="${yscale(minY)}" x2="${W-P.r}" y2="${yscale(minY)}" stroke="#0f172a"/>`,
+      `<line x1="${P.l}" y1="${P.t}" x2="${P.l}" y2="${H-P.b}" stroke="#0f172a"/>`,
+      ...yTicks.map(v=> `<text x="${P.l-6}" y="${yscale(v)+4}" font-size="11" text-anchor="end" fill="#334155">${Math.round(v)}</text>`),
+      ...xs.map((d,i)=> `<text x="${xscale(d)}" y="${H-6}" font-size="11" text-anchor="middle" fill="#334155">${d}</text>`),
+      `<path d="${path}" fill="none" stroke="#0ea5e9" stroke-width="2"/>`,
+      ...points.map((p,i)=> `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#0ea5e9" title="${filtered[i].date}: ${filtered[i].usage} หน่วย"/>`),
+      `</svg>`].join('');
+    chartArea.innerHTML = svg;
+  }
+
+  // Export CSV with fallback
+  function exportCSV(){
+    const header = ['วันที่','บ้าน','ผู้พัก','เลขมิเตอร์รวม','หน่วยใช้','หมายเหตุ','บันทึกเมื่อ'];
+    const rows = readStore().sort((a,b)=> a.date.localeCompare(b.date)).map(b => [
+      b.date, b.house, b.occupant||'', b.reading, b.usage, (b.note||'').replaceAll('\n',' '), new Date(b.createdAt).toLocaleString('th-TH')
+    ]);
+    const lines = [header, ...rows].map(r => r.map(x => '"' + String(x).replaceAll('"','""') + '"').join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + lines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'บันทึกใช้น้ำรายวัน_บ้านพัก_น้ำตกหงาว.csv';
+    try {
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(url), 1000);
+      // Also fill fallback text for copy
+      csvText.value = lines; csvFallback.classList.add('show');
+    } catch(e){
+      // Fallback: show text to copy
+      csvText.value = lines; csvFallback.classList.add('show');
+      setStatus('ดาวน์โหลดอาจถูกบล็อก แสดง CSV ให้คัดลอกแทน', false);
+    }
+  }
+
+  // Clear all
+  function clearAll(){
+    if (!confirm('ล้างข้อมูลทั้งหมดหรือไม่?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    refreshAll();
+  }
+
+  // Events
+  exportBtn.addEventListener('click', exportCSV, false);
+  clearBtn.addEventListener('click', clearAll, false);
+  [filterHouse, filterMonth, filterYear].forEach(s=> s.addEventListener('change', ()=> { renderTable(); }, false));
+  [sumHouse, sumMonth, sumYear].forEach(s=> s.addEventListener('change', ()=> { drawChart(); }, false));
+
+  // Refresh helpers
+  function refreshFilters(){
+    const list = readStore();
+    const houses = [...new Set(list.map(x=> x.house))].sort();
+    const years = [...new Set(list.map(x=> Number(x.date.slice(0,4))))].sort((a,b)=> a-b);
+    const months = [...Array(12)].map((_,i)=> i+1);
+
+    function setOptions(select, values, labels, allOption=true){
+      const keep = select.value;
+      select.innerHTML = '';
+      if (allOption){
+        const optAll = document.createElement('option'); optAll.value = ''; optAll.textContent = 'ทั้งหมด';
+        select.appendChild(optAll);
+      }
+      values.forEach((v,i)=> {
+        const o = document.createElement('option'); o.value = String(v); o.textContent = (labels?labels[i]:v);
+        select.appendChild(o);
+      });
+      select.value = keep || (allOption ? '' : (values[0]||''));
+    }
+
+    setOptions(filterHouse, houses, null, true);
+    setOptions(filterYear, years, null, true);
+    setOptions(filterMonth, months, months.map(i=> (i<10?'0':'')+i + ' - ' + monthsTH[i-1]), true);
+
+    // summary (no 'ทั้งหมด')
+    function setExact(select, values, labels){
+      const keep = select.value;
+      select.innerHTML = '';
+      values.forEach((v,i)=> {
+        const o = document.createElement('option'); o.value = String(v); o.textContent = (labels?labels[i]:v);
+        select.appendChild(o);
+      });
+      if (!values.length) select.value = ''; else select.value = keep && values.includes(keep) ? keep : String(values[0]);
+    }
+    setExact(sumHouse, houses);
+    setExact(sumYear, years.length? years : [new Date().getFullYear()]);
+    setExact(sumMonth, months, months.map(i=> (i<10?'0':'')+i + ' - ' + monthsTH[i-1]));
+  }
+
+  function renderTable(){
+    const list = readStore().sort((a,b)=> a.date.localeCompare(b.date));
+    count.textContent = list.length;
+    tableBody.innerHTML = '';
+    const fh = filterHouse.value, fm = filterMonth.value, fy = filterYear.value;
+    const filtered = list.filter(x=> (!fh || x.house===fh) && (!fm || Number(x.date.slice(5,7))===Number(fm)) && (!fy || Number(x.date.slice(0,4))===Number(fy)) );
+    if (!filtered.length){
+      const tr = document.createElement('tr'); const td = document.createElement('td');
+      td.colSpan=7; td.className='muted'; td.style.textAlign='center'; td.textContent='ยังไม่มีข้อมูล';
+      tr.appendChild(td); tableBody.appendChild(tr); return;
+    }
+    for (const b of filtered){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fmtDate(b.date)}</td>
+        <td>${b.house}</td>
+        <td>${b.occupant||''}</td>
+        <td class=\"num\">${b.reading}</td>
+        <td class=\"num\">${b.usage}</td>
+        <td>${b.note||''}</td>
+        <td><button class=\"btn small danger\" type=\"button\" data-del=\"${b.id}\">ลบ</button></td>
+      `;
+      tableBody.appendChild(tr);
+    }
+  }
+
+  function drawChartInitDefaults(){
+    // if selectors empty, try to prefill
+    const list = readStore();
+    if (!sumHouse.value && list.length){ sumHouse.value = list[0].house; }
+    if (!sumYear.value && list.length){ sumYear.value = list[0].date.slice(0,4); }
+    if (!sumMonth.value && list.length){ sumMonth.value = String(Number(list[0].date.slice(5,7))); }
+  }
+
+  function refreshAll(){
+    refreshFilters();
+    renderTable();
+    drawChartInitDefaults();
+    drawChart();
+  }
+
+  // Init
+  function init(){
+    // ensure buttons are clickable (avoid passive overlay issues)
+    ['click','touchend'].forEach(evt => {
+      exportBtn.addEventListener(evt, ()=>{}, false);
+      saveBtn.addEventListener(evt, ()=>{}, false);
+      clearBtn.addEventListener(evt, ()=>{}, false);
+      testBtn.addEventListener(evt, ()=>{}, false);
+    });
+    // initial calc
+    const byHouse = readStore().filter(x=> x.house === house.value.trim()).sort((a,b)=> a.date.localeCompare(b.date));
+    const prev = byHouse.filter(x=> x.date < dateEl.value).pop();
+    const e = Number(reading.value||0);
+    const s = prev ? Number(prev.reading||0) : e;
+    usage.value = Math.max(0, e - s);
+    refreshAll();
+  }
+
+  init();
+
+})();</script>
+</body>
+</html>
