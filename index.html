@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บันทึกการใช้น้ำ (รายวัน) – อช.น้ำตกหงาว</title>
+<style>
+body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f8fafc;
+}
+h1 {
+    text-align: center;
+    color: #0f172a;
+}
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+label { display: block; margin-top: 10px; }
+input, select, button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+}
+th { background: #e2e8f0; }
+canvas {
+    margin-top: 20px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>บันทึกการใช้น้ำ (รายวัน)</h1>
+    <label>บ้าน/หลังที่:
+        <input type="text" id="house">
+    </label>
+    <label>วันที่:
+        <input type="date" id="date">
+    </label>
+    <label>เลขมิเตอร์รวม ณ สิ้นวัน:
+        <input type="number" id="meter">
+    </label>
+    <button onclick="saveData()">บันทึก</button>
+    <button onclick="exportCSV()">ส่งออก CSV</button>
+
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>บ้าน</th>
+                <th>วันที่</th>
+                <th>เลขมิเตอร์</th>
+                <th>หน่วยใช้วันนี้</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <canvas id="waterChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let records = JSON.parse(localStorage.getItem('waterRecords') || '[]');
+
+function saveData() {
+    const house = document.getElementById('house').value.trim();
+    const date = document.getElementById('date').value;
+    const meter = parseFloat(document.getElementById('meter').value);
+
+    if (!house || !date || isNaN(meter)) {
+        alert('กรุณากรอกข้อมูลให้ครบ');
+        return;
+    }
+
+    // คำนวณหน่วยใช้วันนี้
+    let prev = records
+        .filter(r => r.house === house)
+        .sort((a,b) => new Date(a.date) - new Date(b.date))
+        .slice(-1)[0];
+    let used = prev ? meter - prev.meter : 0;
+
+    records.push({ house, date, meter, used });
+    localStorage.setItem('waterRecords', JSON.stringify(records));
+    renderTable();
+    renderChart();
+}
+
+function renderTable() {
+    const tbody = document.querySelector('#dataTable tbody');
+    tbody.innerHTML = '';
+    records.sort((a,b) => new Date(a.date) - new Date(b.date))
+        .forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${r.house}</td><td>${r.date}</td><td>${r.meter}</td><td>${r.used}</td>`;
+            tbody.appendChild(tr);
+        });
+}
+
+function renderChart() {
+    const ctx = document.getElementById('waterChart').getContext('2d');
+    const sorted = records.sort((a,b) => new Date(a.date) - new Date(b.date));
+    const labels = sorted.map(r => r.date);
+    const data = sorted.map(r => r.used);
+
+    if (window.waterChart) window.waterChart.destroy();
+    window.waterChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'หน่วยใช้น้ำต่อวัน',
+                data,
+                borderColor: '#0ea5e9',
+                backgroundColor: 'rgba(14,165,233,0.3)',
+                fill: true
+            }]
+        }
+    });
+}
+
+function exportCSV() {
+    let csv = 'บ้าน,วันที่,เลขมิเตอร์,หน่วยใช้วันนี้\n';
+    records.forEach(r => {
+        csv += `${r.house},${r.date},${r.meter},${r.used}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'water_usage.csv';
+    a.click();
+}
+
+renderTable();
+renderChart();
+</script>
+</body>
+</html>
